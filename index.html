@@ -1,0 +1,2412 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="볼 배틀">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f1220'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%23ff5a3c'/%3E%3Ccircle cx='26' cy='29' r='4' fill='%23fff'/%3E%3Ccircle cx='38' cy='29' r='4' fill='%23fff'/%3E%3C/svg%3E">
+<title>볼 배틀 아레나</title>
+<style>
+  :root {
+    --bg: #0f1220;
+    --panel: #181c2e;
+    --panel-2: #222842;
+    --panel-hover: #2b3254;
+    --text: #e8ebf5;
+    --muted: #8a91a8;
+    --line: #2c3250;
+    --accent: #4a5bd8;
+    --accent-hover: #5668e6;
+    --hp-high: #3ddc84;
+    --hp-mid: #f5c542;
+    --hp-low: #ff4d4f;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  html {
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior-y: none;   /* 휴대폰에서 아래로 당겨 새로고침되는 것 막기 */
+  }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;            /* 휴대폰 주소창을 뺀 실제 높이 */
+    display: flex;
+    flex-direction: column;
+    /* 노치·홈 표시줄을 피해서 여백 */
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+             max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;    /* 두 번 탭 확대 막기 */
+  }
+  .game {
+    margin: auto;
+    /* 정사각형 경기장 + 상단 바 + 하단 UI가 한 화면에 들어오도록 */
+    width: min(630px, 100%, max(240px, calc(100vh - var(--chrome, 210px))));
+    width: min(630px, 100%, max(240px, calc(100dvh - var(--chrome, 210px))));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .game.selecting { width: min(960px, 100%); }
+
+  /* 상단 바 */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .timer .label { color: var(--muted); font-size: 12px; }
+  button {
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  button:hover { background: var(--panel-hover); }
+  button.primary { background: var(--accent); border-color: var(--accent-hover); font-weight: 700; padding: 8px 18px; }
+  button.primary:hover { background: var(--accent-hover); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* 캐릭터 선택 화면 */
+  .select-screen { display: flex; flex-direction: column; gap: 14px; }
+  .select-head h2 { margin: 0; font-size: 18px; }
+  .select-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; }
+  .char-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color .15s, background-color .15s;
+  }
+  .char-card.on {
+    border-color: var(--c);
+    background: var(--panel-2);    /* color-mix를 못 쓰는 오래된 브라우저용 */
+    background: color-mix(in srgb, var(--c) 12%, var(--panel));
+  }
+  .char-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 12px;
+    text-align: left;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+  .char-toggle:hover { background: rgba(255, 255, 255, 0.04); }
+  .char-toggle:focus-visible { outline: 2px solid var(--c); outline-offset: -2px; }
+  .char-toggle .preview { width: 96px; height: 64px; flex: none; }
+  .info { min-width: 0; padding-right: 22px; }
+  .cname { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
+  .stats { margin-top: 2px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .desc { margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: #c5cadb; }
+  .check {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--c);
+    color: #0f1220;
+    font-size: 12px;
+    font-weight: 800;
+    opacity: 0;
+    transform: scale(.6);
+    transition: opacity .15s, transform .15s;
+  }
+  .char-card.on .check { opacity: 1; transform: none; }
+  .char-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 12px 12px; margin-top: auto; }
+  .name-input {
+    flex: 1 1 110px;
+    min-width: 0;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: #0f1325;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+  .name-input:focus { outline: 2px solid var(--c); outline-offset: -1px; }
+  /* 아이폰은 16px보다 작은 입력칸을 누르면 화면을 확대해서 */
+  @media (pointer: coarse) { .name-input { font-size: 16px; } }
+  .tool-btn { font-size: 12.5px; padding: 6px 10px; }
+  .select-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .select-count { margin-right: auto; color: var(--muted); font-size: 14px; }
+
+  /* 전투 화면 */
+  .play-screen { display: flex; flex-direction: column; gap: 12px; }
+  .arena-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; }
+  canvas#arena {
+    position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+    -webkit-touch-callout: none;   /* 길게 눌러도 메뉴가 뜨지 않게 */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    text-align: center;
+    background: rgba(10, 12, 22, 0.65);
+    border-radius: 14px;
+  }
+  .overlay.show { display: flex; }
+  .win-text { font-size: clamp(28px, 6vw, 48px); font-weight: 800; overflow-wrap: anywhere; }
+  .win-sub { color: var(--muted); font-size: 15px; }
+  .overlay-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+  .overlay-actions button { font-size: 15px; padding: 9px 18px; }
+
+  /* 하단 UI: 캐릭터 이름 + 체력 */
+  .hud { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 10px; }
+  @media (max-width: 640px) { .hud { grid-template-columns: repeat(var(--cols-m, 2), 1fr); } }
+  .card {
+    position: relative;
+    min-width: 0;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    transition: opacity .3s, filter .3s;
+  }
+  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-width: 0; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .skill {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+  }
+  .card.stunned .skill { color: var(--hp-mid); font-weight: 700; }
+  .bar { position: relative; height: 12px; background: #0b0e19; border-radius: 6px; overflow: hidden; }
+  .bar .lag {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 0;
+    background: rgba(255, 255, 255, 0.35);
+    transition: width .6s ease .25s;
+  }
+  .bar .fill {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 0;
+    transition: width .2s ease, background-color .2s;
+  }
+  .hp-text {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .card.hit { animation: hit .3s; }
+  @keyframes hit {
+    0% { background: #4a2030; border-color: var(--hp-low); }
+    100% { background: var(--panel); border-color: var(--line); }
+  }
+  .card.ko { filter: grayscale(1); opacity: .5; }
+  .ko-badge {
+    display: none;
+    position: absolute;
+    top: 9px;
+    right: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--hp-low);
+  }
+  .card.ko .ko-badge { display: block; }
+  .card.ko .skill { visibility: hidden; }
+
+  /* 휴대폰 세로 화면 */
+  @media (max-width: 640px) {
+    .title { font-size: 18px; }
+    .controls { width: 100%; gap: 6px; }
+    .controls > * { flex: 1 1 auto; justify-content: center; }
+    .controls button, .controls .timer { font-size: 13px; padding: 7px 8px; white-space: nowrap; }
+  }
+  /* 휴대폰 (세로·가로) 하단 체력 카드 */
+  @media (max-width: 640px), (orientation: landscape) and (max-height: 520px) {
+    .hud { gap: 8px; }
+    .card { padding: 8px 10px; }
+    /* 긴 이름이 잘리지 않도록 이름은 한 줄 전체, 능력 상태는 그 아래 줄 */
+    .card-head { flex-wrap: wrap; row-gap: 2px; margin-bottom: 6px; align-items: flex-start; }
+    .dot { margin-top: 4px; }
+    .name { flex: 1 1 calc(100% - 20px); white-space: normal; overflow-wrap: anywhere; font-size: 14px; line-height: 1.35; }
+    .skill { flex: 1 1 100%; margin-left: 20px; }
+    .ko-badge { top: auto; bottom: 8px; left: 10px; right: auto; }
+  }
+  /* 휴대폰 가로 화면: 경기장은 왼쪽, 체력 카드는 오른쪽 */
+  @media (orientation: landscape) and (max-height: 520px) {
+    .game, .game.selecting { width: min(960px, 100%); }
+    .topbar { gap: 8px; }
+    .title { font-size: 17px; }
+    .play-screen { flex-direction: row; align-items: flex-start; }
+    .arena-wrap { flex: none; width: calc(100vh - 96px); width: calc(100dvh - 96px); }
+    .hud { flex: 1; min-width: 0; align-content: start; grid-template-columns: repeat(var(--cols-m, 2), 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="game selecting" id="game">
+  <header class="topbar">
+    <div class="title">볼 배틀 아레나</div>
+    <div class="controls" id="play-controls" hidden>
+      <span class="timer"><span class="label">시간</span><span id="timer">00:00</span></span>
+      <button id="speed-btn" type="button">속도 1x</button>
+      <button id="restart-btn" type="button">다시 시작</button>
+      <button id="back-btn" type="button">캐릭터 선택</button>
+    </div>
+  </header>
+
+  <section class="select-screen" id="select-screen">
+    <div class="select-head">
+      <h2>캐릭터 선택</h2>
+      <p>카드를 눌러 전투에 내보낼 캐릭터를 고르세요 (2명 이상). 카드 아래에서 이름을 바꾸거나 사진을 넣을 수 있어요.</p>
+    </div>
+    <div class="char-grid" id="char-grid"></div>
+    <div class="select-foot">
+      <span class="select-count" id="select-count"></span>
+      <button type="button" id="select-all-btn">전체 선택</button>
+      <button type="button" id="start-btn" class="primary">전투 시작</button>
+    </div>
+  </section>
+
+  <section class="play-screen" id="play-screen" hidden>
+    <div class="arena-wrap">
+      <canvas id="arena"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="win-text" id="win-text"></div>
+        <div class="win-sub" id="win-sub"></div>
+        <div class="overlay-actions">
+          <button id="again-btn" type="button" class="primary">다시 하기</button>
+          <button id="result-select-btn" type="button">캐릭터 선택</button>
+        </div>
+      </div>
+    </div>
+    <section class="hud" id="hud" aria-label="캐릭터 체력"></section>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ===== 기본 설정 =====
+  const W = 700;              // 경기장 논리 크기 (정사각형)
+  const H = 700;
+  const WALL = 6;             // 벽 두께
+  const ICON_SCALE = 1.25;    // 캐릭터 아이콘 크기 배율 (김민준 제외)
+  const GIANT_ICON_SCALE = 1.3; // 김민준 아이콘 크기 배율
+  const FONT = '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+
+  // ===== 늑대인간 설정 =====
+  const WOLF_TRANSFORM_AT = 8;     // 게임 시작 후 변신하는 시간(초)
+  const WOLF_DASH_COOLDOWN = 4.4;  // 늑대인간 상태에서 돌진까지 걸리는 시간(초), 돌진이 끝나면 다시 셈
+  const WOLF_DASH_SPEED = 2.6;     // 돌진 속도 배율
+  const WOLF_DASH_WALLS = 3;       // 돌진 중 벽에 이 횟수만큼 튕기면 돌진 종료
+  const WOLF_DASH_HITBOX = 1.7;    // 돌진 중 판정 크기 배율
+  const CLAW_MULT = 7;             // 돌진 할퀴기 피해 = 일반 공격 × 7
+  const STUN_TIME = 1.5;           // 기절 시간(초)
+  const HUMAN_PENALTY = 5;         // 인간 상태에서 상대와 부딪힐 때마다 받는 피해
+
+  // ===== 박재현 설정 =====
+  const PISTOL_DAMAGE = 4;         // 권총 피해
+  const PISTOL_INTERVAL = 1;       // 권총 발사 간격(초)
+  const SNIPER_AT = 15;            // 저격총으로 바꾸는 시간(초)
+  const SNIPER_INTERVAL = 3;       // 저격총 발사 간격(초)
+  const SNIPER_MULT = 3.5;         // 저격총 피해 = 권총 피해 × 3.5
+  const BULLET_SPEED_MULT = 1.7;   // 총알 속도 = 대상의 이동 속도 × 1.7
+  const BULLET_LIFE = 8;           // 총알이 사라지기까지 시간(초)
+
+  // ===== 김민준 설정 =====
+  const GIANT_STEPS = [10, 8, 5, 2]; // 다음 성장까지 시간(초): 10초 뒤 2배 → 8초 뒤 2배 → 5초 뒤 2배 → 2초 뒤 맵 크기
+  const GIANT_SELF_DAMAGE = 10;      // 상대와 부딪힐 때마다 받는 피해
+  const GIANT_INVULN = 0.7;          // 피해를 받은 뒤 어떤 피해도 받지 않는 시간(초)
+  const GROW_TIME = 0.5;             // 커지는 연출 시간(초)
+  const GIANT_MAX_BEFORE_MAP = 0.92; // 맵 크기 직전 단계는 맵의 92%까지만 (2배를 하면 경기장보다 커져서)
+
+  // ===== 리지완 설정 =====
+  const BURGER_INTERVAL = 3;       // 햄버거 소환 간격(초)
+  const BURGER_HEAL = 5;           // 햄버거 회복량
+  const BURGERS_NEEDED = 4;        // 햄버거는 4개까지만 소환, 4개를 다 먹으면 핵폭탄 단계로
+  const RI_TRACK_TIME = 4.5;       // 리지완 모델이 소환되면 그쪽으로 쫓아가는 시간(초)
+  const NUKE_ITEM_DELAY = 1.5;     // 햄버거를 다 먹고 핵폭탄이 소환되기까지(초)
+  const NUKE_GAUGE_TIME = 1.5;     // 핵폭탄을 먹고 게이지가 차는 시간(초)
+  const NUKE_RAIN_INTERVAL = 0.05; // 버튼을 누른 뒤 핵폭탄이 떨어지는 간격(초) = 초당 20발
+  const NUKE_WARN_TIME = 0.6;      // 핵폭탄이 떨어지기까지 걸리는 시간(초)
+  const NUKE_BLAST_R = 120;        // 폭발 범위
+  const NUKE_DAMAGE_RATIO = 0.15;  // 한 발에 상대 최대 체력의 15%
+  const ITEM_R = 13;               // 햄버거·핵폭탄·버튼 크기
+
+  // 캐릭터 목록 (선택 화면과 전투에서 함께 사용)
+  // 캐릭터끼리 닿기만 해서는 피해가 없음. 따로 정한 피해만 있음.
+  // name: 게임에서 바꾼 이름. 앱 미리보기 창은 저장소가 막혀 있어서, 파일을 고칠 때 여기에 옮겨 적어 둠
+  // radius: 기본 크기 (실제 크기는 × ICON_SCALE, 김민준은 × GIANT_ICON_SCALE)
+  const CHARACTERS = [
+    // atk: 늑대인간의 일반 공격 수치. 돌진 할퀴기 피해(atk × 7)를 계산할 때만 쓰임
+    { id: 'wolf', name: '인간 실격 임재범', color: '#c08552', hp: 110, atk: 7, speed: 230, radius: 26, skill: 'werewolf',
+      skillText: '변신',
+      desc: '8초 뒤 늑대인간으로 변신. 4.4초마다 돌진하고 벽에 3번 튕기면 멈춤. 돌진 중엔 판정이 1.7배로 커지고, 부딪힌 적은 7배 피해 + 1.5초 기절. 인간일 땐 부딪힐 때마다 피해 5' },
+    { id: 'park', name: '총든 박재현', color: '#5b8cff', hp: 90, speed: 220, radius: 25, skill: 'gun',
+      skillText: '권총',
+      desc: '1초마다 권총 발사 (벽 관통, 반대편으로 나오면 유도). 15초 뒤 멈춰 서서 3초마다 저격 (피해 3.5배, 바로 유도)' },
+    { id: 'kim', name: '키 1900m 김민준', color: '#2fbf71', hp: 175, speed: 180, radius: 48, skill: 'giant',
+      skillText: '거대화',
+      desc: '다른 캐릭터보다 2배 큼. 10초 → 8초 → 5초 뒤마다 2배씩 커지고, 다시 2초 뒤 맵 크기가 되는 순간 상대 체력을 100% 깎고 승리. 상대와 부딪힐 때마다 피해 10, 피해를 받으면 0.7초 무적' },
+    { id: 'ri', name: '북한 최고 통치자 리지완', color: '#d63a3a', hp: 100, speed: 220, radius: 25, skill: 'nuke',
+      skillText: '햄버거',
+      desc: '3초마다 햄버거 소환 (4개까지), 먹으면 체력 +5. 4개를 다 먹으면 1.5초 뒤 핵폭탄 소환. 핵폭탄을 먹으면 1.5초 동안 게이지가 차고 버튼 소환. 모델이 나오면 4.5초 동안 쫓아감. 버튼을 누르면 상대가 쓰러질 때까지 핵폭탄 대량 투하 (초당 20발, 한 발에 상대 체력 15%)' },
+  ];
+
+  // 사진이 없을 때 그리는 얼굴
+  const FACES = {
+    werewolf: { skin: '#f3cfa6', hair: '#7a4b2a', messy: true, smile: true },
+    gun:      { skin: '#f0c896', hair: '#1f1f28', brows: true },
+    giant:    { skin: '#eebf94', hair: '#3b2a1e', smile: true },
+    nuke:     { skin: '#f2c79e', hair: '#141414', smile: true, cheeks: true },
+  };
+
+  // ===== DOM =====
+  const gameEl = document.getElementById('game');
+  const selectScreen = document.getElementById('select-screen');
+  const playScreen = document.getElementById('play-screen');
+  const playControls = document.getElementById('play-controls');
+  const charGrid = document.getElementById('char-grid');
+  const selectCount = document.getElementById('select-count');
+  const selectAllBtn = document.getElementById('select-all-btn');
+  const startBtn = document.getElementById('start-btn');
+  const canvas = document.getElementById('arena');
+  const ctx = canvas.getContext('2d');
+  const hud = document.getElementById('hud');
+  const overlay = document.getElementById('overlay');
+  const winText = document.getElementById('win-text');
+  const winSub = document.getElementById('win-sub');
+  const timerEl = document.getElementById('timer');
+  const speedBtn = document.getElementById('speed-btn');
+
+  // ===== 상태 =====
+  const STORAGE_KEY = 'ballArena.selection';
+  const CUSTOM_KEY = 'ballArena.custom';
+  let mode = 'select';        // select(캐릭터 선택) / play(전투)
+  let selected = loadSelection();
+  const custom = loadCustom(); // 캐릭터별로 바꾼 이름·사진 { id: { name, photo } }
+  const photoImgs = {};        // 캐릭터별로 불러온 사진 이미지
+  let lineup = [];
+  let balls = [];
+  let bullets = [];
+  let items = [];             // 리지완의 햄버거·핵폭탄·버튼
+  let bombs = [];             // 떨어지는 중인 핵폭탄
+  let blasts = [];            // 폭발 연출
+  let particles = [];
+  let popups = [];
+  let slashes = [];
+  let phase = 'countdown';    // countdown → fight → over
+  let countdown = 3;
+  let elapsed = 0;
+  let shake = 0;
+  let overDelay = 0;
+  let winner = null;
+  let speedMul = 1;
+  let lastTimerText = '';
+  let textScale = 1;          // 작은 화면에서 경기장 안 글자가 너무 작아지지 않게 키우는 배율
+
+  // ===== 도우미 =====
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const sealed = b => b.stun > 0;                  // 기절 중에는 능력 봉인
+  const isStatic = b => b.stun > 0 || b.planted;   // 기절 중이거나 저격 자세면 움직이지 않음
+  // 충돌·피격 판정 크기 (돌진 중인 늑대인간은 1.7배)
+  const hitR = b => b.r * (b.skill === 'werewolf' && b.wolfDash ? WOLF_DASH_HITBOX : 1);
+
+  function circlePath(g, x, y, r) {
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+  }
+
+  function roundRectPath(g, x, y, w, h, r) {
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x, y, w, h, r);
+    else g.rect(x, y, w, h);
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function formatTime(t) {
+    const s = Math.floor(t);
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function loadSelection() {
+    try {
+      const ids = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (Array.isArray(ids)) {
+        const valid = ids.filter(id => CHARACTERS.some(c => c.id === id));
+        if (valid.length >= 2) return new Set(valid);
+      }
+    } catch (e) { /* 저장소를 쓸 수 없으면 기본값 사용 */ }
+    return new Set(CHARACTERS.map(c => c.id));
+  }
+
+  function saveSelection() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...selected])); } catch (e) { /* 무시 */ }
+  }
+
+  function loadCustom() {
+    try {
+      const o = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '{}');
+      if (o && typeof o === 'object') return o;
+    } catch (e) { /* 무시 */ }
+    return {};
+  }
+
+  function saveCustom() {
+    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(custom)); } catch (e) { /* 무시 */ }
+  }
+
+  const displayName = c => (custom[c.id] && custom[c.id].name) || c.name;
+
+  function loadPhoto(id, url, onDone) {
+    const img = new Image();
+    img.onload = () => {
+      photoImgs[id] = img;
+      if (onDone) onDone();
+    };
+    img.src = url;
+  }
+
+  // 고른 사진을 가운데 정사각형으로 잘라 256px로 줄여서 저장
+  function readPhoto(file, id) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 256;
+        const cv = document.createElement('canvas');
+        cv.width = size;
+        cv.height = size;
+        const g = cv.getContext('2d');
+        g.fillStyle = '#ffffff'; // 투명 배경은 흰색으로
+        g.fillRect(0, 0, size, size);
+        const s = Math.min(img.width, img.height);
+        g.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+        const url = cv.toDataURL('image/jpeg', 0.88);
+        custom[id] = { ...(custom[id] || {}), photo: url };
+        saveCustom();
+        loadPhoto(id, url, () => refreshCard(id));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ===== 캐릭터 선택 화면 =====
+  function statsText(c) {
+    const parts = [`체력 ${c.hp}`, `속도 ${c.speed}`];
+    if (c.skill === 'werewolf') parts.push(`할퀴기 ${c.atk * CLAW_MULT}`);
+    if (c.skill === 'gun') parts.push(`권총 ${PISTOL_DAMAGE} · 저격 ${PISTOL_DAMAGE * SNIPER_MULT}`);
+    if (c.skill === 'giant') parts.push(`부딪힐 때 -${GIANT_SELF_DAMAGE}`);
+    if (c.skill === 'nuke') parts.push(`햄버거 +${BURGER_HEAL} · 핵 ${Math.round(NUKE_DAMAGE_RATIO * 100)}%`);
+    return parts.join(' · ');
+  }
+
+  function buildSelect() {
+    charGrid.innerHTML = '';
+    for (const c of CHARACTERS) {
+      const card = document.createElement('div');
+      card.className = 'char-card';
+      card.dataset.id = c.id;
+      card.style.setProperty('--c', c.color);
+      card.innerHTML = `
+        <button type="button" class="char-toggle">
+          <canvas class="preview"></canvas>
+          <div class="info">
+            <div class="cname"></div>
+            <div class="stats"></div>
+            <div class="desc"></div>
+          </div>
+          <span class="check" aria-hidden="true">✓</span>
+        </button>
+        <div class="char-tools">
+          <input type="text" class="name-input" aria-label="캐릭터 이름">
+          <button type="button" class="tool-btn photo-btn">사진 넣기</button>
+          <button type="button" class="tool-btn photo-clear">사진 지우기</button>
+          <input type="file" class="photo-file" accept="image/*" hidden>
+        </div>`;
+      const q = sel => card.querySelector(sel);
+      q('.stats').textContent = statsText(c);
+      q('.desc').textContent = c.desc;
+
+      q('.char-toggle').addEventListener('click', () => {
+        if (selected.has(c.id)) selected.delete(c.id);
+        else selected.add(c.id);
+        refreshSelect();
+      });
+
+      // 이름 바꾸기
+      const nameInput = q('.name-input');
+      nameInput.placeholder = c.name;
+      nameInput.value = displayName(c);
+      nameInput.addEventListener('input', () => {
+        const v = nameInput.value.trim();
+        custom[c.id] = { ...(custom[c.id] || {}) };
+        if (v && v !== c.name) custom[c.id].name = v;
+        else delete custom[c.id].name;
+        saveCustom();
+        refreshCard(c.id);
+      });
+      nameInput.addEventListener('blur', () => {
+        if (!nameInput.value.trim()) nameInput.value = c.name;
+      });
+
+      // 사진 넣기 / 지우기
+      const fileInput = q('.photo-file');
+      q('.photo-btn').addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (f) readPhoto(f, c.id);
+        fileInput.value = '';
+      });
+      q('.photo-clear').addEventListener('click', () => {
+        if (custom[c.id]) delete custom[c.id].photo;
+        delete photoImgs[c.id];
+        saveCustom();
+        refreshCard(c.id);
+      });
+
+      charGrid.appendChild(card);
+      refreshCard(c.id);
+    }
+    refreshSelect();
+  }
+
+  function refreshCard(id) {
+    const c = CHARACTERS.find(x => x.id === id);
+    const card = charGrid.querySelector(`[data-id="${id}"]`);
+    if (!c || !card) return;
+    card.querySelector('.cname').textContent = displayName(c);
+    card.querySelector('.photo-btn').textContent = photoImgs[id] ? '사진 바꾸기' : '사진 넣기';
+    card.querySelector('.photo-clear').hidden = !photoImgs[id];
+    drawPreview(card.querySelector('.preview'), c);
+  }
+
+  function refreshSelect() {
+    for (const card of charGrid.children) {
+      const on = selected.has(card.dataset.id);
+      card.classList.toggle('on', on);
+      card.querySelector('.char-toggle').setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    const n = selected.size;
+    selectCount.textContent = n >= 2 ? `선택 ${n}명` : `선택 ${n}명 · 2명 이상 골라 주세요`;
+    startBtn.disabled = n < 2;
+    selectAllBtn.textContent = n === CHARACTERS.length ? '전체 해제' : '전체 선택';
+  }
+
+  function drawPreview(cv, c) {
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = 96 * dpr;
+    cv.height = 64 * dpr;
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const look = {
+      skill: c.skill, color: c.color, photoId: c.id, vx: 1, vy: 0.2, savedVx: 0, savedVy: 0,
+      aim: 0, recoil: 0, wolf: false, wolfDash: false, sniper: false, lookAt: null,
+    };
+    if (c.skill === 'werewolf') {
+      drawCharacter(g, look, 24, 38, 16);
+      g.fillStyle = '#8a91a8';
+      g.beginPath();
+      g.moveTo(44, 33);
+      g.lineTo(52, 38);
+      g.lineTo(44, 43);
+      g.closePath();
+      g.fill();
+      drawCharacter(g, { ...look, wolf: true }, 72, 40, 16);
+    } else if (c.skill === 'gun') {
+      drawCharacter(g, look, 34, 32, 19);
+    } else if (c.skill === 'giant') {
+      drawCharacter(g, look, 48, 32, 29);
+    } else if (c.skill === 'nuke') {
+      drawCharacter(g, look, 30, 34, 19);
+      drawBurger(g, 70, 21, 9);
+      drawNukeModel(g, 72, 47, 9, 0);
+    }
+  }
+
+  function showScreen(m) {
+    mode = m;
+    const isSelect = m === 'select';
+    selectScreen.hidden = !isSelect;
+    playScreen.hidden = isSelect;
+    playControls.hidden = isSelect;
+    gameEl.classList.toggle('selecting', isSelect);
+    if (isSelect) {
+      overlay.classList.remove('show');
+      refreshSelect();
+    }
+  }
+
+  function startBattle() {
+    if (selected.size < 2) return;
+    lineup = CHARACTERS.filter(c => selected.has(c.id));
+    saveSelection();
+    showScreen('play');
+    reset();
+  }
+
+  // ===== 게임 시작/재시작 =====
+  function makeBall(c, x, y, dir) {
+    const r = c.radius * (c.skill === 'giant' ? GIANT_ICON_SCALE : ICON_SCALE);
+    return {
+      id: c.id, photoId: c.id, name: displayName(c), color: c.color, skill: c.skill, skillText: c.skillText,
+      maxHp: c.hp, hp: c.hp, atk: c.atk || 0, speed: c.speed,
+      r, mass: r * r,
+      x, y,
+      vx: Math.cos(dir) * c.speed,
+      vy: Math.sin(dir) * c.speed,
+      alive: true, flash: 0, deathT: 0, invuln: 0,
+      stun: 0, savedVx: 0, savedVy: 0, planted: false,
+      trail: [],
+      // 늑대인간
+      wolf: false, wolfDash: false, dashCd: 0, wallHits: 0, wallCd: 0, clawed: new Set(),
+      // 박재현
+      sniper: false, gunTimer: PISTOL_INTERVAL, aim: 0, aimTarget: null, recoil: 0,
+      // 김민준
+      giantStage: 0, growTimer: GIANT_STEPS[0], growing: false, growFrom: 0, growTo: 0, growT: 0, lookAt: null,
+      // 리지완: burger → waitNuke → findNuke → gauge → findButton → rain
+      riStage: 'burger', riTimer: BURGER_INTERVAL, burgersEaten: 0, burgersSpawned: 0, trackTime: 0,
+      ui: null,
+    };
+  }
+
+  function reset() {
+    const n = lineup.length;
+    const slots = shuffle(lineup.map((_, i) => i));
+    balls = lineup.map((c, i) => {
+      const ang = (slots[i] / n) * Math.PI * 2 + Math.PI / 4;
+      return makeBall(
+        c,
+        W / 2 + Math.cos(ang) * W * 0.32,
+        H / 2 + Math.sin(ang) * H * 0.32,
+        rand(0, Math.PI * 2)
+      );
+    });
+    for (const b of balls) if (b.skill === 'gun') aimAt(b, nearestEnemy(b));
+    bullets = [];
+    items = [];
+    bombs = [];
+    blasts = [];
+    particles = [];
+    popups = [];
+    slashes = [];
+    phase = 'countdown';
+    countdown = 3;
+    elapsed = 0;
+    shake = 0;
+    overDelay = 0;
+    winner = null;
+    lastTimerText = '';
+    overlay.classList.remove('show');
+    buildHud();
+    updateHud();
+    updateTimer();
+  }
+
+  // ===== 업데이트 =====
+  function update(dt) {
+    if (phase === 'countdown') {
+      countdown -= dt;
+      if (countdown <= 0) phase = 'fight';
+      updateEffects(dt);
+      return;
+    }
+    if (phase === 'fight') elapsed += dt;
+
+    for (const b of balls) {
+      if (!b.alive) continue;
+      b.flash = Math.max(0, b.flash - dt);
+      b.wallCd = Math.max(0, b.wallCd - dt);
+      b.recoil = Math.max(0, b.recoil - dt * 6);
+      b.invuln = Math.max(0, b.invuln - dt);
+      if (b.stun > 0) {
+        b.stun -= dt;
+        if (b.stun <= 0) releaseStun(b);
+      }
+      if (b.skill === 'giant') b.lookAt = nearestEnemy(b);
+      if (!sealed(b)) updateSkill(b, dt);
+      if (b.growing) updateGrowth(b, dt);
+
+      if (isStatic(b)) {
+        b.vx = 0;
+        b.vy = 0;
+      } else {
+        keepSpeed(b, dt);
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        if (bounceWalls(b)) onWallHit(b);
+      }
+
+      if (b.skill === 'werewolf') {
+        b.trail.push({ x: b.x, y: b.y });
+        if (b.trail.length > 18) b.trail.shift();
+      }
+    }
+
+    for (let i = 0; i < balls.length; i++) {
+      for (let j = i + 1; j < balls.length; j++) {
+        if (balls[i].alive && balls[j].alive) collide(balls[i], balls[j]);
+      }
+    }
+    for (const b of balls) {
+      if (b.alive && !isStatic(b) && bounceWalls(b)) onWallHit(b);
+    }
+    // 커지는 중엔 멈춰 있어도 벽 밖으로 나가지 않게
+    for (const b of balls) if (b.alive && b.growing) bounceWalls(b);
+
+    if (phase === 'fight') {
+      updateBullets(dt);
+      updateBombs(dt);
+    }
+
+    if (phase === 'fight') {
+      const alive = balls.filter(b => b.alive);
+      if (alive.length <= 1) {
+        phase = 'over';
+        winner = alive[0] || null;
+        overDelay = 1.2;
+        bullets = [];
+        bombs = [];
+      }
+    } else if (phase === 'over' && overDelay > 0) {
+      overDelay -= dt;
+      if (overDelay <= 0) showResult();
+    }
+
+    updateEffects(dt);
+  }
+
+  function nearestEnemy(b) {
+    let best = null;
+    let bestD = Infinity;
+    for (const o of balls) {
+      if (o === b || !o.alive) continue;
+      const d = (o.x - b.x) ** 2 + (o.y - b.y) ** 2;
+      if (d < bestD) { bestD = d; best = o; }
+    }
+    return best;
+  }
+
+  function aimAt(b, t) {
+    b.aimTarget = t;
+    if (t) b.aim = Math.atan2(t.y - b.y, t.x - b.x);
+  }
+
+  // 캐릭터별 능력 (기절 중에는 호출되지 않음)
+  function updateSkill(b, dt) {
+    if (phase !== 'fight') return;
+    if (b.skill === 'werewolf') updateWerewolf(b, dt);
+    else if (b.skill === 'gun') updateGunner(b, dt);
+    else if (b.skill === 'giant') updateGiant(b, dt);
+    else if (b.skill === 'nuke') updateRi(b, dt);
+  }
+
+  // ----- 늑대인간 -----
+  function updateWerewolf(b, dt) {
+    if (!b.wolf) {
+      if (elapsed >= WOLF_TRANSFORM_AT) {
+        b.wolf = true;
+        b.dashCd = WOLF_DASH_COOLDOWN;
+        addPopup(b, '변신!', '#ffd23c', 18);
+        burst(b.x, b.y, '#6d5847', 24, 260);
+        burst(b.x, b.y, '#ffd23c', 10, 200);
+        shake = Math.max(shake, 6);
+      }
+      return;
+    }
+    if (!b.wolfDash) {
+      b.dashCd -= dt;
+      if (b.dashCd <= 0) startWolfDash(b);
+    }
+  }
+
+  function startWolfDash(b) {
+    b.wolfDash = true;
+    b.wallHits = 0;
+    b.clawed.clear();
+    b.trail.length = 0;
+    // 지금 가던 방향 그대로 빠르게
+    const sp = Math.hypot(b.vx, b.vy) || 1;
+    b.vx = (b.vx / sp) * b.speed * WOLF_DASH_SPEED;
+    b.vy = (b.vy / sp) * b.speed * WOLF_DASH_SPEED;
+  }
+
+  function endWolfDash(b) {
+    b.wolfDash = false;
+    b.dashCd = WOLF_DASH_COOLDOWN;
+    const sp = Math.hypot(b.vx, b.vy) || 1;
+    b.vx = (b.vx / sp) * b.speed;
+    b.vy = (b.vy / sp) * b.speed;
+  }
+
+  function onWallHit(b) {
+    if (b.skill !== 'werewolf' || !b.wolf || b.wallCd > 0) return;
+    b.wallCd = 0.1; // 모서리에서 두 번 세지 않도록
+    addPopup(b, '아우우우', '#e6d6ff', 15);
+    if (b.wolfDash) {
+      b.wallHits++;
+      if (b.wallHits >= WOLF_DASH_WALLS) endWolfDash(b);
+    }
+  }
+
+  // ----- 박재현 -----
+  function updateGunner(b, dt) {
+    if (!b.sniper && elapsed >= SNIPER_AT) {
+      b.sniper = true;
+      b.planted = true;
+      b.vx = 0;
+      b.vy = 0;
+      b.gunTimer = SNIPER_INTERVAL;
+      addPopup(b, '저격 모드!', '#9db8ff', 16);
+    }
+    const t = nearestEnemy(b);
+    aimAt(b, t);
+    b.gunTimer -= dt;
+    if (b.gunTimer <= 0) {
+      b.gunTimer = b.sniper ? SNIPER_INTERVAL : PISTOL_INTERVAL;
+      if (t) fireBullet(b, t);
+    }
+  }
+
+  // 총 모양의 위치 계산 (그리기와 발사 위치가 같도록 함께 사용)
+  function gunFrame(b, r) {
+    const flip = Math.cos(b.aim) < 0 ? -1 : 1;
+    return { a: b.aim, flip, ox: r * 0.72, oy: r * 0.5 * flip, s: r / 25 };
+  }
+
+  function muzzlePoint(b) {
+    const { a, flip, ox, oy, s } = gunFrame(b, b.r);
+    const lx = ox + (b.sniper ? 44 : 15) * s;
+    const ly = oy + (b.sniper ? 0 : -0.25) * s * flip;
+    return {
+      x: b.x + Math.cos(a) * lx - Math.sin(a) * ly,
+      y: b.y + Math.sin(a) * lx + Math.cos(a) * ly,
+    };
+  }
+
+  function fireBullet(b, t) {
+    const m = muzzlePoint(b);
+    const spd = BULLET_SPEED_MULT * t.speed;
+    const dx = t.x - m.x;
+    const dy = t.y - m.y;
+    const d = Math.hypot(dx, dy) || 1;
+    bullets.push({
+      x: m.x, y: m.y,
+      vx: (dx / d) * spd, vy: (dy / d) * spd,
+      owner: b, target: t,
+      homing: b.sniper,              // 저격탄은 바로 유도, 권총탄은 반대편으로 나온 뒤부터 유도
+      sniper: b.sniper,
+      damage: PISTOL_DAMAGE * (b.sniper ? SNIPER_MULT : 1),
+      life: BULLET_LIFE,
+      trail: [],
+    });
+    b.recoil = 1;
+    burst(m.x, m.y, '#ffd27a', b.sniper ? 10 : 5, 120);
+    if (b.sniper) shake = Math.max(shake, 3);
+  }
+
+  function updateBullets(dt) {
+    for (const u of bullets) {
+      u.life -= dt;
+      if (!u.target || !u.target.alive) u.target = nearestEnemy(u.owner);
+
+      if (u.homing && u.target) {
+        const t = u.target;
+        let dx = t.x - u.x;
+        let dy = t.y - u.y;
+        // 벽을 관통하므로, 반대편으로 돌아가는 길이 더 짧으면 그쪽으로 감
+        if (dx > W / 2) dx -= W; else if (dx < -W / 2) dx += W;
+        if (dy > H / 2) dy -= H; else if (dy < -H / 2) dy += H;
+        const d = Math.hypot(dx, dy) || 1;
+        const spd = BULLET_SPEED_MULT * t.speed;
+        u.vx = (dx / d) * spd;
+        u.vy = (dy / d) * spd;
+      }
+
+      u.x += u.vx * dt;
+      u.y += u.vy * dt;
+
+      // 화면 밖으로 나가면 반대편에서 다시 나옴 → 이때부터 유도 시작
+      let wrapped = false;
+      if (u.x < 0) { u.x += W; wrapped = true; } else if (u.x >= W) { u.x -= W; wrapped = true; }
+      if (u.y < 0) { u.y += H; wrapped = true; } else if (u.y >= H) { u.y -= H; wrapped = true; }
+      if (wrapped) {
+        u.homing = true;
+        u.trail.length = 0;
+      }
+      u.trail.push({ x: u.x, y: u.y });
+      if (u.trail.length > (u.sniper ? 14 : 8)) u.trail.shift();
+
+      for (const b of balls) {
+        if (!b.alive || b === u.owner) continue;
+        const rr = hitR(b) + 3;
+        if ((b.x - u.x) ** 2 + (b.y - u.y) ** 2 <= rr * rr) {
+          bulletHit(u, b);
+          u.life = 0;
+          break;
+        }
+      }
+    }
+    bullets = bullets.filter(u => u.life > 0);
+  }
+
+  function bulletHit(u, tgt) {
+    const amount = Math.round(u.damage);
+    if (u.sniper) {
+      if (damage(tgt, amount, { text: `-${amount} 저격!`, color: '#ff9f1c', size: 20 })) shake = Math.max(shake, 5);
+    } else {
+      damage(tgt, amount, { color: '#cfd8ff', size: 14 });
+    }
+    burst(u.x, u.y, u.sniper ? '#ff9f1c' : '#ffe08a', u.sniper ? 12 : 5, 150);
+  }
+
+  // ----- 김민준 -----
+  function updateGiant(b, dt) {
+    if (b.giantStage >= GIANT_STEPS.length) return;
+    b.growTimer -= dt;
+    if (b.growTimer > 0) return;
+    b.giantStage++;
+    const final = b.giantStage === GIANT_STEPS.length;
+    b.growing = true;
+    b.growT = 0;
+    b.growFrom = b.r;
+    const mapR = (Math.min(W, H) - WALL * 2) / 2;
+    // 마지막은 맵과 같은 크기. 그 전 단계는 2배씩이지만 경기장에 들어가도록 맵의 92%까지만
+    b.growTo = final ? mapR : Math.min(b.r * 2, mapR * GIANT_MAX_BEFORE_MAP);
+    if (!final) b.growTimer = GIANT_STEPS[b.giantStage];
+    addPopup(b, final ? '맵 크기!' : '2배!', '#7dffb0', 24);
+    shake = Math.max(shake, final ? 14 : 7);
+  }
+
+  function updateGrowth(b, dt) {
+    b.growT = Math.min(1, b.growT + dt / GROW_TIME);
+    const e = 1 - (1 - b.growT) ** 3;
+    b.r = b.growFrom + (b.growTo - b.growFrom) * e;
+    b.mass = b.r * b.r;
+    if (b.growT >= 1) {
+      b.growing = false;
+      if (b.giantStage >= GIANT_STEPS.length && phase === 'fight') giantWin(b);
+    }
+  }
+
+  // 맵과 같은 크기가 된 순간: 상대 체력 100% 깎고 승리
+  function giantWin(b) {
+    for (const o of balls) {
+      if (o === b || !o.alive) continue;
+      o.hp = 0;
+      addPopup(o, '-100%', '#ff4d4f', 26);
+      knockOut(o);
+    }
+    shake = Math.max(shake, 16);
+  }
+
+  // ----- 리지완 -----
+  function updateRi(b, dt) {
+    if (b.riStage === 'burger') {
+      if (b.burgersSpawned < BURGERS_NEEDED) { // 햄버거는 4개까지만
+        b.riTimer -= dt;
+        if (b.riTimer <= 0) {
+          b.riTimer = BURGER_INTERVAL;
+          b.burgersSpawned++;
+          spawnItem('burger', b);
+        }
+      }
+    } else if (b.riStage === 'waitNuke') {
+      b.riTimer -= dt;
+      if (b.riTimer <= 0) {
+        spawnItem('nuke', b);
+        b.riStage = 'findNuke';
+      }
+    } else if (b.riStage === 'gauge') {
+      b.riTimer -= dt;
+      if (b.riTimer <= 0) {
+        spawnItem('button', b);
+        b.riStage = 'findButton';
+      }
+    } else if (b.riStage === 'rain') {
+      b.riTimer -= dt;
+      while (b.riTimer <= 0) {
+        b.riTimer += NUKE_RAIN_INTERVAL;
+        dropBomb(b);
+      }
+    }
+
+    // 자기 모델이 소환되면 4.5초 동안 가장 가까운 모델 쪽으로 쫓아감
+    if (b.trackTime > 0) {
+      b.trackTime -= dt;
+      const t = nearestItem(b);
+      if (t) {
+        const dx = t.x - b.x;
+        const dy = t.y - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const sp = Math.hypot(b.vx, b.vy) || b.speed;
+        b.vx = (dx / d) * sp;
+        b.vy = (dy / d) * sp;
+      } else {
+        b.trackTime = 0;
+      }
+    }
+
+    // 리지완이 아이템에 닿으면 사라지며 효과
+    for (const it of items) {
+      if (it.owner !== b || it.gone) continue;
+      const rr = b.r + ITEM_R;
+      if ((it.x - b.x) ** 2 + (it.y - b.y) ** 2 > rr * rr) continue;
+      it.gone = true;
+      if (it.type === 'burger') {
+        const heal = Math.min(BURGER_HEAL, b.maxHp - b.hp);
+        b.hp += heal;
+        addPopup(b, heal > 0 ? `+${heal}` : '냠', '#3ddc84', 16);
+        b.burgersEaten++;
+        if (b.riStage === 'burger' && b.burgersEaten >= BURGERS_NEEDED) {
+          b.riStage = 'waitNuke';
+          b.riTimer = NUKE_ITEM_DELAY;
+        }
+      } else if (it.type === 'nuke') {
+        b.riStage = 'gauge';
+        b.riTimer = NUKE_GAUGE_TIME;
+        addPopup(b, '핵 확보!', '#ffd23c', 16);
+      } else if (it.type === 'button') {
+        b.riStage = 'rain';
+        b.riTimer = 0;
+        addPopup(b, '발사!', '#ff4d4f', 24);
+        shake = Math.max(shake, 10);
+      }
+      burst(it.x, it.y, '#ffffff', 8, 140);
+    }
+    items = items.filter(it => !it.gone);
+  }
+
+  function nearestItem(b) {
+    let best = null;
+    let bestD = Infinity;
+    for (const it of items) {
+      if (it.owner !== b || it.gone) continue;
+      const d = (it.x - b.x) ** 2 + (it.y - b.y) ** 2;
+      if (d < bestD) { bestD = d; best = it; }
+    }
+    return best;
+  }
+
+  function spawnItem(type, owner) {
+    const m = WALL + ITEM_R + 14;
+    const it = { type, owner, x: rand(m, W - m), y: rand(m, H - m), gone: false };
+    items.push(it);
+    owner.trackTime = RI_TRACK_TIME; // 소환되면 4.5초 동안 쫓아감
+    burst(it.x, it.y, type === 'burger' ? '#ffd27a' : type === 'nuke' ? '#b8d86b' : '#ff6b6b', 8, 120);
+  }
+
+  function dropBomb(owner) {
+    bombs.push({
+      owner,
+      x: rand(WALL + 10, W - WALL - 10),
+      y: rand(WALL + 10, H - WALL - 10),
+      t: NUKE_WARN_TIME,
+      done: false,
+    });
+  }
+
+  function updateBombs(dt) {
+    for (const k of bombs) {
+      k.t -= dt;
+      if (k.t <= 0 && !k.done) {
+        k.done = true;
+        explode(k);
+      }
+    }
+    bombs = bombs.filter(k => !k.done);
+  }
+
+  // 핵폭탄 폭발: 범위 안의 상대에게 최대 체력의 15% 피해 (리지완 자신은 피해 없음)
+  function explode(k) {
+    blasts.push({ x: k.x, y: k.y, life: 0.6, max: 0.6 });
+    burst(k.x, k.y, '#ffb347', 10, 260);
+    shake = Math.max(shake, 2.5);
+    for (const o of balls) {
+      if (!o.alive || o === k.owner) continue;
+      const rr = NUKE_BLAST_R + hitR(o) * 0.5;
+      if ((o.x - k.x) ** 2 + (o.y - k.y) ** 2 <= rr * rr) {
+        damage(o, Math.max(1, Math.round(o.maxHp * NUKE_DAMAGE_RATIO)), { color: '#ffb347', size: 18 });
+      }
+    }
+  }
+
+  // ----- 공통 이동 -----
+  // 충돌 후 빨라지거나 느려진 속도를 원래 속도로 서서히 되돌림
+  function keepSpeed(b, dt) {
+    const target = b.speed * (b.wolfDash ? WOLF_DASH_SPEED : 1);
+    let sp = Math.hypot(b.vx, b.vy);
+    if (sp < 1) {
+      const a = rand(0, Math.PI * 2);
+      b.vx = Math.cos(a);
+      b.vy = Math.sin(a);
+      sp = 1;
+    }
+    const next = sp + (target - sp) * Math.min(1, dt * 3);
+    b.vx = (b.vx / sp) * next;
+    b.vy = (b.vy / sp) * next;
+  }
+
+  // 벽에 닿으면 튕김. 실제로 튕겼으면 true (벽은 실제 크기 기준)
+  function bounceWalls(b) {
+    const minX = WALL + b.r, maxX = W - WALL - b.r;
+    const minY = WALL + b.r, maxY = H - WALL - b.r;
+    let hit = false;
+    if (minX > maxX) { b.x = W / 2; }
+    else if (b.x < minX) { b.x = minX; if (b.vx < 0) { b.vx = -b.vx; hit = true; } }
+    else if (b.x > maxX) { b.x = maxX; if (b.vx > 0) { b.vx = -b.vx; hit = true; } }
+    if (minY > maxY) { b.y = H / 2; }
+    else if (b.y < minY) { b.y = minY; if (b.vy < 0) { b.vy = -b.vy; hit = true; } }
+    else if (b.y > maxY) { b.y = maxY; if (b.vy > 0) { b.vy = -b.vy; hit = true; } }
+    return hit;
+  }
+
+  // ----- 기절 -----
+  function stunBall(b, time) {
+    if (b.stun <= 0) {
+      b.savedVx = b.vx;
+      b.savedVy = b.vy;
+    }
+    b.stun = Math.max(b.stun, time);
+    b.vx = 0;
+    b.vy = 0;
+    b.trail.length = 0;
+  }
+
+  function releaseStun(b) {
+    b.stun = 0;
+    if (b.planted) return;
+    const sp = Math.hypot(b.savedVx, b.savedVy);
+    const a = sp > 0.01 ? Math.atan2(b.savedVy, b.savedVx) : rand(0, Math.PI * 2);
+    b.vx = Math.cos(a) * b.speed;
+    b.vy = Math.sin(a) * b.speed;
+  }
+
+  // ----- 충돌과 피해 -----
+  // 공끼리 충돌: 겹침 해소 → 탄성 반사 → (따로 정한 경우에만) 피해
+  function collide(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy);
+    const minDist = hitR(a) + hitR(b);
+    if (dist >= minDist) return;
+
+    const nx = dist > 0.0001 ? dx / dist : 1;
+    const ny = dist > 0.0001 ? dy / dist : 0;
+    const overlap = minDist - dist;
+    // 멈춰 있는 공(기절·저격 자세)은 밀리지 않는 벽처럼 취급
+    const ia = isStatic(a) ? 0 : 1 / a.mass;
+    const ib = isStatic(b) ? 0 : 1 / b.mass;
+    const sum = ia + ib;
+    if (sum === 0) {
+      a.x -= nx * overlap / 2;
+      a.y -= ny * overlap / 2;
+      b.x += nx * overlap / 2;
+      b.y += ny * overlap / 2;
+      return;
+    }
+    a.x -= nx * overlap * (ia / sum);
+    a.y -= ny * overlap * (ia / sum);
+    b.x += nx * overlap * (ib / sum);
+    b.y += ny * overlap * (ib / sum);
+
+    const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+    if (vn >= 0) return; // 이미 멀어지는 중이면 반사·피해 없음
+
+    const j = (-2 * vn) / sum;
+    a.vx -= j * ia * nx;
+    a.vy -= j * ia * ny;
+    b.vx += j * ib * nx;
+    b.vy += j * ib * ny;
+
+    // 피해는 동시에 계산해서 동시에 적용 (먼저 계산된 쪽이 유리하지 않도록)
+    const toB = contactDamage(a, b);
+    const toA = contactDamage(b, a);
+    const hitB = toB && applyHit(a, b, toB);
+    const hitA = toA && applyHit(b, a, toA);
+
+    if (hitA || hitB) {
+      const cx = a.x + nx * hitR(a);
+      const cy = a.y + ny * hitR(a);
+      burst(cx, cy, a.color, 6, 180);
+      burst(cx, cy, b.color, 6, 180);
+      shake = Math.max(shake, 4);
+    }
+  }
+
+  // 캐릭터끼리 닿았을 때의 피해: 따로 정한 경우만 있고, 그 외에는 닿아도 피해 없음
+  function contactDamage(att, tgt) {
+    let amount = 0;
+    const hit = {};
+    // 돌진 중인 늑대인간에게 부딪힌 상대: 일반 공격 × 7 + 기절 (돌진 1번에 같은 상대는 1번만)
+    if (att.skill === 'werewolf' && att.wolfDash && !att.clawed.has(tgt)) {
+      amount += att.atk * CLAW_MULT;
+      hit.claw = true;
+    }
+    // 인간 상태의 늑대인간은 상대와 부딪힐 때마다 피해 5
+    if (tgt.skill === 'werewolf' && !tgt.wolf) {
+      amount += HUMAN_PENALTY;
+      hit.human = true;
+    }
+    // 김민준은 상대와 부딪힐 때마다 피해 10
+    if (tgt.skill === 'giant') amount += GIANT_SELF_DAMAGE;
+    if (amount <= 0) return null;
+    hit.amount = amount;
+    return hit;
+  }
+
+  // 실제로 피해가 들어갔으면 true
+  function applyHit(att, tgt, hit) {
+    if (!tgt.alive || tgt.invuln > 0) return false; // 김민준 무적 중엔 기절도 없음
+    if (hit.human) addPopup(tgt, '난 인간이야', '#ffe3c2', 15);
+    const style = hit.claw ? { text: `-${hit.amount} 할퀴기!`, color: '#ff4d4f', size: 24 } : {};
+    damage(tgt, hit.amount, style);
+    if (hit.claw) {
+      att.clawed.add(tgt);
+      slashes.push({ owner: tgt, life: 0.5, max: 0.5, angle: -Math.PI / 4 + rand(-0.3, 0.3) });
+      if (tgt.alive) {
+        stunBall(tgt, STUN_TIME);
+        addPopup(tgt, '기절!', '#ffd23c', 16);
+      }
+      shake = Math.max(shake, 9);
+    }
+    return true;
+  }
+
+  // 피해 적용. 무적이라 막혔으면 false
+  function damage(tgt, amount, style = {}) {
+    if (!tgt.alive || tgt.invuln > 0) return false;
+    tgt.hp = Math.max(0, tgt.hp - amount);
+    tgt.flash = 0.12;
+    addPopup(tgt, style.text || `-${amount}`, style.color || '#ffffff', style.size || 16);
+    if (tgt.skill === 'giant') tgt.invuln = GIANT_INVULN; // 김민준: 피해를 받으면 1.5초 무적
+    if (tgt.hp <= 0) knockOut(tgt);
+    return true;
+  }
+
+  function knockOut(tgt) {
+    if (!tgt.alive) return;
+    tgt.alive = false;
+    tgt.deathT = 0.5;
+    tgt.stun = 0;
+    tgt.growing = false;
+    burst(tgt.x, tgt.y, tgt.color, 28, 320);
+    addPopup(tgt, 'KO!', '#ff4d4f', 28, 0);
+    shake = Math.max(shake, 10);
+    if (tgt.skill === 'nuke') {
+      items = items.filter(it => it.owner !== tgt);
+      bombs = bombs.filter(k => k.owner !== tgt);
+    }
+  }
+
+  // ===== 연출 효과 =====
+  function burst(x, y, color, count, power) {
+    for (let i = 0; i < count; i++) {
+      const a = rand(0, Math.PI * 2);
+      const s = power * rand(0.3, 1);
+      const life = rand(0.35, 0.7);
+      particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life, max: life, color, size: rand(1.5, 3.5) });
+    }
+  }
+
+  // 글자 팝업: 해당 캐릭터를 따라다니며 위로 떠오름
+  function addPopup(owner, text, color, size, offsetY) {
+    // 기본 위치: 이름표 바로 위
+    if (offsetY === undefined) offsetY = -(owner.r + 21 + 13 * textScale + (owner.wolf ? owner.r * 0.3 : 0));
+    // 같은 캐릭터에 방금 뜬 팝업이 있으면 겹치지 않게 한 줄 위에 표시
+    const stacked = popups.filter(t => t.owner === owner && t.rise < 16).length;
+    popups.push({ owner, offsetY: offsetY - stacked * 20 * textScale, rise: 0, text, color, size, life: 0.9, max: 0.9 });
+  }
+
+  function updateEffects(dt) {
+    const friction = Math.max(0, 1 - 4 * dt);
+    for (const p of particles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= friction;
+      p.vy *= friction;
+      p.life -= dt;
+    }
+    particles = particles.filter(p => p.life > 0);
+    for (const t of popups) { t.rise += 40 * dt; t.life -= dt; }
+    popups = popups.filter(t => t.life > 0);
+    for (const s of slashes) s.life -= dt;
+    slashes = slashes.filter(s => s.life > 0);
+    for (const e of blasts) e.life -= dt;
+    blasts = blasts.filter(e => e.life > 0);
+    for (const b of balls) if (!b.alive && b.deathT > 0) b.deathT = Math.max(0, b.deathT - dt);
+    shake = Math.max(0, shake - 30 * dt);
+  }
+
+  // ===== 그리기 =====
+  function render() {
+    const sx = canvas.width / W;
+    const sy = canvas.height / H;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const ox = shake > 0 ? rand(-shake, shake) : 0;
+    const oy = shake > 0 ? rand(-shake, shake) : 0;
+    ctx.setTransform(sx, 0, 0, sy, ox * sx, oy * sy);
+
+    drawArena();
+    for (const b of balls) drawTrail(b);
+    for (const b of balls) {
+      if (b.alive && b.sniper && b.aimTarget && b.aimTarget.alive && phase === 'fight') drawLaser(b);
+    }
+    for (const b of balls) if (!b.alive) drawBall(b);
+    // 큰 캐릭터를 먼저 그려서 작은 캐릭터가 가려지지 않게
+    const alive = balls.filter(b => b.alive).sort((p, q) => q.r - p.r);
+    for (const b of alive) drawBall(b);
+    drawBombMarkers();
+    drawItems();
+    for (const b of alive) drawGauge(b);
+    drawBullets();
+    drawFallingBombs();
+    drawBlasts();
+    drawSlashes();
+    drawParticles();
+    drawPopups();
+    drawCenterText();
+  }
+
+  function drawArena() {
+    ctx.fillStyle = '#161b30';
+    roundRectPath(ctx, 0, 0, W, H, 14);
+    ctx.fill();
+
+    // 십자선 + 가운데 원 (모눈은 없음)
+    ctx.save();
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W / 2, 0);
+    ctx.lineTo(W / 2, H);
+    ctx.moveTo(0, H / 2);
+    ctx.lineTo(W, H / 2);
+    ctx.stroke();
+    circlePath(ctx, W / 2, H / 2, 80);
+    ctx.stroke();
+    ctx.restore();
+
+    // 테두리: 검은 벽 + 안쪽의 얇은 밝은 선으로 깔끔하게
+    ctx.strokeStyle = '#050608';
+    ctx.lineWidth = WALL;
+    roundRectPath(ctx, WALL / 2, WALL / 2, W - WALL, H - WALL, 12);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, WALL + 0.5, WALL + 0.5, W - WALL * 2 - 1, H - WALL * 2 - 1, 9);
+    ctx.stroke();
+  }
+
+  function drawTrail(b) {
+    if (!b.alive || b.trail.length < 2) return;
+    if (b.skill !== 'werewolf' || !b.wolfDash) return; // 돌진 중인 늑대인간만 잔상
+    const strength = 0.5;
+    const n = b.trail.length;
+    ctx.fillStyle = '#ff4d4f';
+    for (let i = 0; i < n; i++) {
+      const t = i / n;
+      ctx.globalAlpha = t * strength;
+      circlePath(ctx, b.trail[i].x, b.trail[i].y, b.r * (0.35 + 0.6 * t));
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 저격 조준선: 발사가 가까울수록 진해짐
+  function drawLaser(b) {
+    const t = b.aimTarget;
+    const m = muzzlePoint(b);
+    const charge = 1 - Math.max(0, b.gunTimer) / SNIPER_INTERVAL;
+    ctx.save();
+    ctx.globalAlpha = 0.12 + 0.5 * charge;
+    ctx.strokeStyle = '#ff3b3b';
+    ctx.lineWidth = 1 + charge;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(m.x, m.y);
+    ctx.lineTo(t.x, t.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBall(b) {
+    let alpha = 1;
+    let scale = 1;
+    if (!b.alive) {
+      if (b.deathT <= 0) return;
+      const t = b.deathT / 0.5;
+      alpha = t;
+      scale = 1 + (1 - t) * 0.5;
+    } else if (b.invuln > 0 && Math.floor(b.invuln * 12) % 2 === 0) {
+      alpha = 0.55; // 김민준 무적 시간 동안 깜빡임
+    }
+    const r = b.r * scale;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // 돌진 중인 늑대인간: 커진 판정 범위 표시
+    if (b.alive && b.skill === 'werewolf' && b.wolfDash) {
+      const hr = hitR(b);
+      ctx.fillStyle = 'rgba(255,77,79,0.12)';
+      circlePath(ctx, b.x, b.y, hr);
+      ctx.fill();
+      ctx.save();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = 'rgba(255,77,79,0.6)';
+      ctx.lineWidth = 1.5;
+      circlePath(ctx, b.x, b.y, hr);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 그림자
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    circlePath(ctx, b.x + 3, b.y + 5, r);
+    ctx.fill();
+
+    drawCharacter(ctx, b, b.x, b.y, r);
+
+    // 피격 순간 흰색 번쩍임
+    if (b.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${(b.flash / 0.12) * 0.8})`;
+      circlePath(ctx, b.x, b.y, r);
+      ctx.fill();
+    }
+
+    if (b.alive && b.stun > 0) drawStunStars(b, r);
+    drawLabel(b, r);
+    ctx.restore();
+  }
+
+  function drawLabel(b, r) {
+    const extra = b.skill === 'werewolf' && b.wolf ? r * 0.3 : 0; // 늑대 귀만큼 위로
+    const fs = 13 * textScale;
+    ctx.font = `bold ${fs}px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3 * textScale;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    let ly;
+    if (b.y - r - extra - fs - 9 >= WALL) {
+      ctx.textBaseline = 'bottom';
+      ly = b.y - r - extra - 5;
+    } else if (b.y + r + fs + 9 <= H - WALL) {
+      ctx.textBaseline = 'top';
+      ly = b.y + r + 5;
+    } else {
+      // 너무 커서 바깥에 자리가 없으면 안쪽 위에 표시
+      ctx.textBaseline = 'middle';
+      ly = b.y - r * 0.62;
+    }
+    // 벽 가까이 있어도 이름표가 경기장 밖으로 잘리지 않게
+    const half = ctx.measureText(b.name).width / 2 + 4;
+    const lx = half * 2 >= W - WALL * 2 ? W / 2 : Math.min(W - WALL - half, Math.max(WALL + half, b.x));
+    ctx.strokeText(b.name, lx, ly);
+    ctx.fillText(b.name, lx, ly);
+  }
+
+  // 바라보는 방향 (박재현은 조준 방향, 김민준은 가까운 상대, 나머지는 이동 방향)
+  function lookDir(b) {
+    if (b.skill === 'gun') return { x: Math.cos(b.aim), y: Math.sin(b.aim) };
+    if (b.skill === 'giant' && b.lookAt) {
+      const dx = b.lookAt.x - b.x;
+      const dy = b.lookAt.y - b.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0.01) return { x: dx / d, y: dy / d };
+    }
+    let sp = Math.hypot(b.vx, b.vy);
+    if (sp > 0.01) return { x: b.vx / sp, y: b.vy / sp };
+    sp = Math.hypot(b.savedVx, b.savedVy);
+    if (sp > 0.01) return { x: b.savedVx / sp, y: b.savedVy / sp };
+    return { x: 0, y: 1 };
+  }
+
+  // 캐릭터 그림 (전투 화면과 선택 화면 미리보기에서 함께 사용). 사진이 있으면 얼굴 대신 사진
+  function drawCharacter(g, b, x, y, r) {
+    const look = lookDir(b);
+    const photo = photoImgs[b.photoId];
+    if (b.skill === 'werewolf' && b.wolf) {
+      drawWolf(g, b, x, y, r, look, photo);
+      return;
+    }
+    if (photo) drawPhotoFace(g, photo, x, y, r, b.color);
+    else drawHuman(g, x, y, r, look, FACES[b.skill], b.color);
+    if (b.skill === 'gun') drawGun(g, b, x, y, r);
+  }
+
+  function drawPhotoFace(g, img, x, y, r, ring) {
+    g.save();
+    circlePath(g, x, y, r);
+    g.clip();
+    g.drawImage(img, x - r, y - r, r * 2, r * 2);
+    g.restore();
+    g.lineWidth = Math.max(2, r * 0.1);
+    g.strokeStyle = ring;
+    circlePath(g, x, y, r);
+    g.stroke();
+  }
+
+  // 입체감 하이라이트
+  function shade(g, x, y, r, strength = 0.6) {
+    const grad = g.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.05, x - r * 0.2, y - r * 0.2, r * 1.15);
+    grad.addColorStop(0, `rgba(255,255,255,${strength})`);
+    grad.addColorStop(0.5, 'rgba(255,255,255,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.25)');
+    g.fillStyle = grad;
+    circlePath(g, x, y, r);
+    g.fill();
+  }
+
+  // 사람 얼굴
+  function drawHuman(g, x, y, r, look, o, ring) {
+    g.fillStyle = o.skin;
+    circlePath(g, x, y, r);
+    g.fill();
+
+    // 머리카락
+    g.save();
+    circlePath(g, x, y, r);
+    g.clip();
+    g.fillStyle = o.hair;
+    g.beginPath();
+    g.ellipse(x, y - r * 0.86, r * 1.12, r * 0.62, 0, 0, Math.PI * 2);
+    g.fill();
+    if (o.messy) {
+      // 삐죽한 앞머리
+      g.beginPath();
+      g.moveTo(x - r * 0.75, y - r * 0.4);
+      g.lineTo(x - r * 0.5, y - r * 0.17);
+      g.lineTo(x - r * 0.28, y - r * 0.32);
+      g.lineTo(x - r * 0.04, y - r * 0.15);
+      g.lineTo(x + r * 0.2, y - r * 0.32);
+      g.lineTo(x + r * 0.46, y - r * 0.17);
+      g.lineTo(x + r * 0.75, y - r * 0.4);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+    shade(g, x, y, r, 0.35);
+
+    // 볼 홍조
+    if (o.cheeks) {
+      g.fillStyle = 'rgba(255,110,110,0.35)';
+      for (const s of [-1, 1]) {
+        g.beginPath();
+        g.ellipse(x + s * r * 0.52, y + r * 0.3, r * 0.14, r * 0.09, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+
+    // 눈
+    for (const s of [-1, 1]) {
+      const ex = x + s * r * 0.34;
+      const ey = y + r * 0.04;
+      g.fillStyle = '#ffffff';
+      circlePath(g, ex, ey, r * 0.17);
+      g.fill();
+      g.fillStyle = '#1d1f2b';
+      circlePath(g, ex + look.x * r * 0.06, ey + look.y * r * 0.06, r * 0.095);
+      g.fill();
+    }
+
+    g.lineCap = 'round';
+    // 진지한 눈썹
+    if (o.brows) {
+      g.strokeStyle = '#111217';
+      g.lineWidth = Math.max(1.2, r * 0.08);
+      for (const s of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(x + s * r * 0.14, y - r * 0.17);
+        g.lineTo(x + s * r * 0.5, y - r * 0.27);
+        g.stroke();
+      }
+    }
+
+    // 입
+    g.strokeStyle = '#8a4b3c';
+    g.lineWidth = Math.max(1.2, r * 0.06);
+    g.beginPath();
+    if (o.smile) {
+      g.arc(x, y + r * 0.3, r * 0.2, Math.PI * 0.15, Math.PI * 0.85);
+    } else {
+      g.moveTo(x - r * 0.16, y + r * 0.42);
+      g.lineTo(x + r * 0.16, y + r * 0.4);
+    }
+    g.stroke();
+
+    // 테두리 (캐릭터 색)
+    g.lineWidth = Math.max(2, r * 0.1);
+    g.strokeStyle = ring;
+    circlePath(g, x, y, r);
+    g.stroke();
+  }
+
+  // 늑대인간 상태 (사진이 있으면 얼굴 자리에 사진, 귀와 털은 그대로)
+  function drawWolf(g, b, x, y, r, look, photo) {
+    const fur = '#6d5847';
+    const furDark = '#4b3c31';
+
+    // 귀
+    for (const s of [-1, 1]) {
+      g.fillStyle = furDark;
+      g.beginPath();
+      g.moveTo(x + s * r * 0.95, y - r * 0.2);
+      g.lineTo(x + s * r * 0.66, y - r * 1.28);
+      g.lineTo(x + s * r * 0.1, y - r * 0.82);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#d9928c';
+      g.beginPath();
+      g.moveTo(x + s * r * 0.76, y - r * 0.45);
+      g.lineTo(x + s * r * 0.63, y - r * 1.02);
+      g.lineTo(x + s * r * 0.32, y - r * 0.8);
+      g.closePath();
+      g.fill();
+    }
+
+    // 볼 옆 털
+    g.fillStyle = furDark;
+    for (const s of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(x + s * r * 0.85, y - r * 0.05);
+      g.lineTo(x + s * r * 1.2, y + r * 0.28);
+      g.lineTo(x + s * r * 0.92, y + r * 0.42);
+      g.lineTo(x + s * r * 1.08, y + r * 0.7);
+      g.lineTo(x + s * r * 0.6, y + r * 0.8);
+      g.closePath();
+      g.fill();
+    }
+
+    if (photo) {
+      g.save();
+      circlePath(g, x, y, r);
+      g.clip();
+      g.drawImage(photo, x - r, y - r, r * 2, r * 2);
+      g.restore();
+    } else {
+      drawWolfFace(g, b, x, y, r, look, fur);
+    }
+
+    // 테두리 (돌진 중엔 빨갛게 빛남)
+    g.save();
+    if (b.wolfDash) {
+      g.shadowColor = '#ff4d4f';
+      g.shadowBlur = 14;
+    }
+    g.lineWidth = b.wolfDash ? 3 : photo ? Math.max(2, r * 0.1) : 2;
+    g.strokeStyle = b.wolfDash ? '#ff4d4f' : photo ? furDark : 'rgba(0,0,0,0.4)';
+    circlePath(g, x, y, r);
+    g.stroke();
+    g.restore();
+  }
+
+  function drawWolfFace(g, b, x, y, r, look, fur) {
+    // 머리
+    g.fillStyle = fur;
+    circlePath(g, x, y, r);
+    g.fill();
+    shade(g, x, y, r, 0.3);
+
+    // 주둥이
+    g.fillStyle = '#cdb69c';
+    g.beginPath();
+    g.ellipse(x, y + r * 0.38, r * 0.46, r * 0.32, 0, 0, Math.PI * 2);
+    g.fill();
+    // 코
+    g.fillStyle = '#1b1414';
+    g.beginPath();
+    g.ellipse(x, y + r * 0.2, r * 0.15, r * 0.1, 0, 0, Math.PI * 2);
+    g.fill();
+    // 입
+    g.strokeStyle = '#3a2a22';
+    g.lineWidth = Math.max(1, r * 0.05);
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(x, y + r * 0.29);
+    g.lineTo(x, y + r * 0.44);
+    g.moveTo(x - r * 0.24, y + r * 0.46);
+    g.quadraticCurveTo(x, y + r * 0.56, x + r * 0.24, y + r * 0.46);
+    g.stroke();
+    // 송곳니
+    g.fillStyle = '#ffffff';
+    for (const s of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(x + s * r * 0.21, y + r * 0.49);
+      g.lineTo(x + s * r * 0.08, y + r * 0.5);
+      g.lineTo(x + s * r * 0.15, y + r * 0.68);
+      g.closePath();
+      g.fill();
+    }
+
+    // 눈 (돌진 중엔 빨갛게)
+    const eye = b.wolfDash ? '#ff4d4f' : '#ffd23c';
+    for (const s of [-1, 1]) {
+      const ex = x + s * r * 0.36;
+      const ey = y - r * 0.12;
+      g.fillStyle = eye;
+      g.beginPath();
+      g.ellipse(ex, ey, r * 0.16, r * 0.11, -s * 0.35, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#120c0a';
+      g.beginPath();
+      g.ellipse(ex + look.x * r * 0.05, ey + look.y * r * 0.03, r * 0.045, r * 0.09, 0, 0, Math.PI * 2);
+      g.fill();
+      // 화난 눈썹
+      g.strokeStyle = '#2b211b';
+      g.lineWidth = Math.max(1.2, r * 0.08);
+      g.beginPath();
+      g.moveTo(x + s * r * 0.14, y - r * 0.24);
+      g.lineTo(x + s * r * 0.55, y - r * 0.34);
+      g.stroke();
+    }
+  }
+
+  // 박재현이 든 총 (작은 권총 → 15초 뒤 저격총)
+  function drawGun(g, b, x, y, r) {
+    const { a, flip, ox, oy, s } = gunFrame(b, r);
+    const kick = (b.recoil || 0) * (b.sniper ? 6 : 3);
+    g.save();
+    g.translate(x, y);
+    g.rotate(a);
+    g.translate(ox - kick, oy);
+    g.scale(s, s * flip);   // 왼쪽을 겨눌 때 총이 뒤집히지 않도록
+    // 어두운 경기장에서도 보이도록 밝은 금속색 + 얇은 검은 테두리
+    g.strokeStyle = 'rgba(0,0,0,0.55)';
+    g.lineWidth = 1;
+    if (b.sniper) {
+      // 개머리판
+      g.fillStyle = '#9b6a45';
+      g.beginPath();
+      g.moveTo(-12, -2);
+      g.lineTo(2, -3);
+      g.lineTo(2, 3);
+      g.lineTo(-13, 5);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      // 몸통
+      g.fillStyle = '#8f98ad';
+      g.fillRect(0, -3, 22, 6);
+      g.strokeRect(0, -3, 22, 6);
+      // 총열
+      g.fillStyle = '#b4bccd';
+      g.fillRect(22, -1.5, 20, 3);
+      g.strokeRect(22, -1.5, 20, 3);
+      g.fillRect(40, -2.5, 4, 5);
+      g.strokeRect(40, -2.5, 4, 5);
+      // 조준경
+      g.fillStyle = '#5d6477';
+      g.fillRect(6, -8, 13, 4);
+      g.strokeRect(6, -8, 13, 4);
+      g.fillStyle = '#6fc3ff';
+      g.fillRect(18, -7.5, 1.5, 3);
+      // 손잡이 + 손
+      g.fillStyle = '#6b7388';
+      g.beginPath();
+      g.moveTo(8, 3);
+      g.lineTo(12, 3);
+      g.lineTo(10, 9);
+      g.lineTo(6, 9);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#f0c896';
+      circlePath(g, 9, 7, 3.2);
+      g.fill();
+    } else {
+      // 손잡이
+      g.fillStyle = '#6b7388';
+      g.beginPath();
+      g.moveTo(1, 2);
+      g.lineTo(6, 2);
+      g.lineTo(4.5, 10);
+      g.lineTo(-0.5, 9.5);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      // 슬라이드
+      g.fillStyle = '#9aa3b8';
+      g.fillRect(0, -3, 15, 5.5);
+      g.strokeRect(0, -3, 15, 5.5);
+      g.fillStyle = '#d0d6e4';
+      g.fillRect(0.5, -2.5, 14, 1.4);
+      // 방아쇠울
+      g.strokeStyle = '#6b7388';
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.arc(7.5, 3.5, 2.2, 0, Math.PI);
+      g.stroke();
+      // 손
+      g.fillStyle = '#f0c896';
+      circlePath(g, 2.5, 6, 3.3);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  // ----- 리지완 아이템 모델 -----
+  function drawBurger(g, x, y, s) {
+    // 아래 빵
+    g.fillStyle = '#d98a3a';
+    roundRectPath(g, x - s, y + s * 0.28, s * 2, s * 0.55, s * 0.25);
+    g.fill();
+    // 패티
+    g.fillStyle = '#5b3420';
+    roundRectPath(g, x - s * 1.05, y + s * 0.02, s * 2.1, s * 0.36, s * 0.18);
+    g.fill();
+    // 치즈
+    g.fillStyle = '#ffd23c';
+    g.beginPath();
+    g.moveTo(x - s, y + s * 0.02);
+    g.lineTo(x + s, y + s * 0.02);
+    g.lineTo(x + s * 0.55, y + s * 0.26);
+    g.lineTo(x + s * 0.1, y + s * 0.08);
+    g.lineTo(x - s * 0.45, y + s * 0.28);
+    g.closePath();
+    g.fill();
+    // 양상추
+    g.fillStyle = '#5fcf5a';
+    roundRectPath(g, x - s * 1.1, y - s * 0.16, s * 2.2, s * 0.22, s * 0.1);
+    g.fill();
+    // 위 빵
+    g.fillStyle = '#e9a24a';
+    g.beginPath();
+    g.ellipse(x, y - s * 0.14, s, s * 0.78, 0, Math.PI, 0);
+    g.closePath();
+    g.fill();
+    // 참깨
+    g.fillStyle = '#fff3d6';
+    for (const [dx, dy] of [[-0.42, -0.5], [0, -0.72], [0.4, -0.48], [0.12, -0.36], [-0.18, -0.3]]) {
+      g.beginPath();
+      g.ellipse(x + dx * s, y + dy * s, s * 0.1, s * 0.06, 0.4, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  function drawNukeModel(g, x, y, s, angle) {
+    g.save();
+    g.translate(x, y);
+    g.rotate(angle);
+    // 꼬리 날개
+    g.fillStyle = '#4b5563';
+    g.beginPath();
+    g.moveTo(-s * 0.85, 0);
+    g.lineTo(-s * 1.4, -s * 0.62);
+    g.lineTo(-s * 1.1, 0);
+    g.lineTo(-s * 1.4, s * 0.62);
+    g.closePath();
+    g.fill();
+    // 몸통
+    g.fillStyle = '#6b7a52';
+    g.beginPath();
+    g.ellipse(0, 0, s * 1.1, s * 0.56, 0, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,0.5)';
+    g.lineWidth = 1;
+    g.stroke();
+    // 방사능 표시
+    const cx = s * 0.12;
+    g.fillStyle = '#ffd23c';
+    circlePath(g, cx, 0, s * 0.4);
+    g.fill();
+    g.fillStyle = '#111111';
+    for (const c of [-Math.PI / 2, Math.PI / 6, (5 * Math.PI) / 6]) {
+      g.beginPath();
+      g.moveTo(cx, 0);
+      g.arc(cx, 0, s * 0.34, c - Math.PI / 6, c + Math.PI / 6);
+      g.closePath();
+      g.fill();
+    }
+    g.fillStyle = '#ffd23c';
+    circlePath(g, cx, 0, s * 0.1);
+    g.fill();
+    g.fillStyle = '#111111';
+    circlePath(g, cx, 0, s * 0.06);
+    g.fill();
+    g.restore();
+  }
+
+  function drawButtonModel(g, x, y, s) {
+    // 받침
+    g.fillStyle = '#3d4352';
+    roundRectPath(g, x - s, y - s * 0.2, s * 2, s * 0.9, s * 0.2);
+    g.fill();
+    g.fillStyle = '#9aa3b8';
+    roundRectPath(g, x - s * 0.82, y - s * 0.34, s * 1.64, s * 0.28, s * 0.1);
+    g.fill();
+    // 빨간 버튼
+    g.save();
+    g.shadowColor = '#ff3b3b';
+    g.shadowBlur = 10;
+    g.fillStyle = '#ff3b3b';
+    g.beginPath();
+    g.ellipse(x, y - s * 0.34, s * 0.62, s * 0.58, 0, Math.PI, 0);
+    g.closePath();
+    g.fill();
+    g.restore();
+    g.fillStyle = 'rgba(255,255,255,0.5)';
+    g.beginPath();
+    g.ellipse(x - s * 0.2, y - s * 0.62, s * 0.16, s * 0.09, -0.4, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  function drawItems() {
+    const t = performance.now() / 1000;
+    for (const it of items) {
+      const bob = Math.sin(t * 4 + it.x) * 2;
+      if (it.type === 'burger') drawBurger(ctx, it.x, it.y + bob, ITEM_R);
+      else if (it.type === 'nuke') drawNukeModel(ctx, it.x, it.y + bob, ITEM_R, -0.3);
+      else drawButtonModel(ctx, it.x, it.y + bob, ITEM_R);
+    }
+  }
+
+  // 핵폭탄을 먹은 뒤 리지완 아래에 차오르는 게이지
+  function drawGauge(b) {
+    if (b.skill !== 'nuke' || b.riStage !== 'gauge') return;
+    const p = 1 - Math.max(0, b.riTimer) / NUKE_GAUGE_TIME;
+    const w = Math.max(46, b.r * 2.2);
+    const h = 7;
+    const x = b.x - w / 2;
+    let y = b.y + b.r + 8;
+    if (y + h > H - WALL - 2) y = b.y - b.r - 34; // 아래 벽에 붙어 있으면 위에 표시
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    roundRectPath(ctx, x - 2, y - 2, w + 4, h + 4, 5);
+    ctx.fill();
+    if (p > 0.02) {
+      ctx.fillStyle = '#ffd23c';
+      roundRectPath(ctx, x, y, w * p, h, 3);
+      ctx.fill();
+    }
+  }
+
+  function drawBombMarkers() {
+    for (const k of bombs) {
+      const p = 1 - k.t / NUKE_WARN_TIME; // 0 → 1
+      ctx.fillStyle = `rgba(255,59,59,${0.05 + 0.1 * p})`;
+      circlePath(ctx, k.x, k.y, NUKE_BLAST_R);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,59,59,${0.25 + 0.45 * p})`;
+      ctx.lineWidth = 2;
+      circlePath(ctx, k.x, k.y, NUKE_BLAST_R * (1 - 0.6 * p) + 6);
+      ctx.stroke();
+    }
+  }
+
+  function drawFallingBombs() {
+    for (const k of bombs) {
+      const p = k.t / NUKE_WARN_TIME; // 1 → 0 (떨어지는 중)
+      drawNukeModel(ctx, k.x, k.y - 320 * p, ITEM_R * 1.2, Math.PI / 2);
+    }
+  }
+
+  function drawBlasts() {
+    for (const e of blasts) {
+      const p = 1 - e.life / e.max;
+      const r = NUKE_BLAST_R * (0.35 + 0.75 * (1 - (1 - p) ** 3));
+      ctx.globalAlpha = 1 - p;
+      const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r);
+      grad.addColorStop(0, '#fffbe6');
+      grad.addColorStop(0.35, '#ffd23c');
+      grad.addColorStop(0.7, '#ff7a1a');
+      grad.addColorStop(1, 'rgba(255,80,20,0)');
+      ctx.fillStyle = grad;
+      circlePath(ctx, e.x, e.y, r);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,240,200,0.8)';
+      ctx.lineWidth = 3;
+      circlePath(ctx, e.x, e.y, r * 1.1);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawStar(g, x, y, R, color) {
+    g.fillStyle = color;
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const rr = i % 2 === 0 ? R : R * 0.45;
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const px = x + Math.cos(a) * rr;
+      const py = y + Math.sin(a) * rr;
+      if (i === 0) g.moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fill();
+  }
+
+  // 기절: 머리 위로 별이 빙글빙글
+  function drawStunStars(b, r) {
+    const t = performance.now() / 1000;
+    for (let i = 0; i < 3; i++) {
+      const a = t * 5 + (i * Math.PI * 2) / 3;
+      drawStar(ctx, b.x + Math.cos(a) * r * 0.8, b.y - r * 0.9 + Math.sin(a) * r * 0.25, 5, '#ffd23c');
+    }
+  }
+
+  function drawBullets() {
+    ctx.lineCap = 'round';
+    for (const u of bullets) {
+      const col = u.sniper ? '#ff9f1c' : u.homing ? '#ff6b6b' : '#ffe08a';
+      const n = u.trail.length;
+      ctx.strokeStyle = col;
+      for (let i = 1; i < n; i++) {
+        ctx.globalAlpha = (i / n) * 0.5;
+        ctx.lineWidth = (u.sniper ? 3.5 : 2.2) * (i / n);
+        ctx.beginPath();
+        ctx.moveTo(u.trail[i - 1].x, u.trail[i - 1].y);
+        ctx.lineTo(u.trail[i].x, u.trail[i].y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = col;
+      circlePath(ctx, u.x, u.y, u.sniper ? 4 : 3);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // 할퀴기 효과: 세 줄 발톱 자국
+  function drawSlashes() {
+    for (const s of slashes) {
+      const o = s.owner;
+      const r = Math.min(o.r, 60);
+      const t = 1 - s.life / s.max;
+      const reveal = Math.min(1, t / 0.25);
+      const alpha = t < 0.5 ? 1 : 1 - (t - 0.5) / 0.5;
+      ctx.save();
+      ctx.translate(o.x, o.y);
+      ctx.rotate(s.angle);
+      ctx.globalAlpha = alpha;
+      ctx.lineCap = 'round';
+      for (let i = -1; i <= 1; i++) {
+        const off = i * r * 0.38;
+        const x0 = -r * 1.1;
+        const x1 = x0 + r * 2.2 * reveal;
+        for (const [color, width] of [['rgba(255,60,60,0.9)', 6], ['#ffffff', 2.5]]) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          ctx.moveTo(x0, off - r * 0.15);
+          ctx.quadraticCurveTo((x0 + x1) / 2, off + r * 0.15, x1, off - r * 0.15);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life / p.max);
+      ctx.fillStyle = p.color;
+      circlePath(ctx, p.x, p.y, p.size);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPopups() {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    const edgeX = 60 * textScale;
+    const edgeY = 28 * textScale;
+    for (const t of popups) {
+      const x = Math.min(W - edgeX, Math.max(edgeX, t.owner.x));
+      const y = Math.min(H - edgeY, Math.max(edgeY, t.owner.y + t.offsetY - t.rise));
+      ctx.globalAlpha = Math.min(1, (t.life / t.max) * 2);
+      ctx.font = `bold ${t.size * textScale}px ${FONT}`;
+      ctx.lineWidth = 4 * textScale;
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.strokeText(t.text, x, y);
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.text, x, y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCenterText() {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+
+    let text = null;
+    let size = 96;
+    let color = '#ffffff';
+    let alpha = 1;
+    if (phase === 'countdown') {
+      const n = Math.max(1, Math.ceil(countdown));
+      const frac = countdown - n + 1; // 각 숫자마다 1 → 0
+      text = String(n);
+      size = 80 + frac * 40;
+      alpha = 0.4 + frac * 0.6;
+    } else if (phase === 'fight' && elapsed < 0.8) {
+      text = '시작!';
+      size = 80;
+      color = '#ffd23c';
+      alpha = 1 - elapsed / 0.8;
+    }
+    if (text) {
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.font = `800 ${size}px ${FONT}`;
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.strokeText(text, W / 2, H / 2);
+      ctx.fillStyle = color;
+      ctx.fillText(text, W / 2, H / 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ===== 하단 UI (이름 + 체력) =====
+  function buildHud() {
+    hud.innerHTML = '';
+    const n = balls.length;
+    hud.style.setProperty('--cols', n <= 4 ? n : 3);
+    hud.style.setProperty('--cols-m', Math.min(2, n)); // 휴대폰에서는 2칸까지
+    updateChrome();
+    for (const b of balls) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="card-head">
+          <span class="dot"></span>
+          <span class="name"></span>
+          <span class="skill"></span>
+        </div>
+        <div class="bar"><div class="lag"></div><div class="fill"></div></div>
+        <div class="hp-text"></div>
+        <span class="ko-badge">KO</span>`;
+      card.querySelector('.dot').style.background = b.color;
+      card.querySelector('.name').textContent = b.name;
+      hud.appendChild(card);
+      b.ui = {
+        card,
+        fill: card.querySelector('.fill'),
+        lag: card.querySelector('.lag'),
+        text: card.querySelector('.hp-text'),
+        skill: card.querySelector('.skill'),
+        lastHp: null,
+        lastLabel: null,
+      };
+    }
+  }
+
+  // 경기장 말고 화면을 차지하는 높이(상단 바 + 하단 카드 + 여백) → 경기장이 한 화면에 들어오게 크기 조절
+  const mobileQuery = window.matchMedia('(max-width: 640px)');
+  function updateChrome() {
+    const n = Math.max(1, balls.length);
+    const mobile = mobileQuery.matches;
+    const rows = mobile ? Math.ceil(n / 2) : n > 4 ? 2 : 1;
+    const chrome = mobile ? 140 + rows * 100 : 120 + rows * 90;
+    gameEl.style.setProperty('--chrome', chrome + 'px');
+  }
+  window.addEventListener('resize', updateChrome);
+
+  // 카드 오른쪽 위에 보이는 현재 능력 상태
+  function skillLabel(b) {
+    if (b.stun > 0) return '기절!';
+    if (b.skill === 'werewolf') {
+      if (!b.wolf) return `인간 · 변신까지 ${Math.max(1, Math.ceil(WOLF_TRANSFORM_AT - elapsed))}초`;
+      return b.wolfDash ? '돌진 중!' : '늑대인간';
+    }
+    if (b.skill === 'gun') return b.sniper ? '저격총 · 3초마다' : '권총 · 1초마다';
+    if (b.skill === 'giant') {
+      if (b.invuln > 0) return '무적';
+      if (b.giantStage >= GIANT_STEPS.length) return '맵 크기!';
+      const rem = Math.max(1, Math.ceil(b.growTimer));
+      return b.giantStage === GIANT_STEPS.length - 1 ? `${rem}초 뒤 맵 크기` : `${rem}초 뒤 2배`;
+    }
+    if (b.skill === 'nuke') {
+      switch (b.riStage) {
+        case 'burger': return `햄버거 ${b.burgersEaten}/${BURGERS_NEEDED}`;
+        case 'waitNuke': return '핵폭탄 준비 중';
+        case 'findNuke': return '핵폭탄 찾는 중';
+        case 'gauge': return '발사 준비 중';
+        case 'findButton': return '버튼 찾는 중';
+        default: return '핵 공격!';
+      }
+    }
+    return b.skillText;
+  }
+
+  function updateHud() {
+    for (const b of balls) {
+      const ui = b.ui;
+      if (ui.lastHp !== b.hp) {
+        const pct = (b.hp / b.maxHp) * 100;
+        ui.fill.style.width = pct + '%';
+        ui.lag.style.width = pct + '%';
+        ui.fill.style.backgroundColor = pct > 60 ? 'var(--hp-high)' : pct > 30 ? 'var(--hp-mid)' : 'var(--hp-low)';
+        ui.text.textContent = `${b.hp} / ${b.maxHp}`;
+        if (ui.lastHp !== null && b.hp < ui.lastHp) {
+          ui.card.classList.remove('hit');
+          void ui.card.offsetWidth; // 애니메이션 다시 재생
+          ui.card.classList.add('hit');
+        }
+        ui.lastHp = b.hp;
+      }
+      const label = skillLabel(b);
+      if (label !== ui.lastLabel) {
+        ui.skill.textContent = label;
+        ui.lastLabel = label;
+      }
+      ui.card.classList.toggle('stunned', b.alive && b.stun > 0);
+      ui.card.classList.toggle('ko', !b.alive);
+    }
+  }
+
+  function updateTimer() {
+    const text = formatTime(elapsed);
+    if (text !== lastTimerText) {
+      timerEl.textContent = text;
+      lastTimerText = text;
+    }
+  }
+
+  function showResult() {
+    if (winner) {
+      winText.textContent = `${winner.name} 승리!`;
+      winText.style.color = winner.color;
+      winSub.textContent = `남은 체력 ${winner.hp} / ${winner.maxHp} · 경기 시간 ${formatTime(elapsed)}`;
+    } else {
+      winText.textContent = '무승부!';
+      winText.style.color = '';
+      winSub.textContent = `경기 시간 ${formatTime(elapsed)}`;
+    }
+    overlay.classList.add('show');
+  }
+
+  // ===== 캔버스 크기 (고해상도 화면 대응) =====
+  function resizeCanvas() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1); // 휴대폰 배터리·성능을 위해 2배까지만
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width * dpr));
+    const h = Math.max(1, Math.round(rect.height * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    // 경기장이 화면에 작게 그려질수록 글자를 키움 (컴퓨터 화면 1배 ~ 휴대폰 약 1.6배)
+    if (rect.width > 0) textScale = Math.min(1.8, Math.max(1, 0.8 / (rect.width / W)));
+  }
+  new ResizeObserver(resizeCanvas).observe(canvas);
+  resizeCanvas();
+
+  // ===== 조작 =====
+  startBtn.addEventListener('click', startBattle);
+  selectAllBtn.addEventListener('click', () => {
+    if (selected.size === CHARACTERS.length) selected.clear();
+    else for (const c of CHARACTERS) selected.add(c.id);
+    refreshSelect();
+  });
+  document.getElementById('restart-btn').addEventListener('click', reset);
+  document.getElementById('again-btn').addEventListener('click', reset);
+  document.getElementById('back-btn').addEventListener('click', () => showScreen('select'));
+  document.getElementById('result-select-btn').addEventListener('click', () => showScreen('select'));
+  speedBtn.addEventListener('click', () => {
+    speedMul = speedMul === 1 ? 2 : 1;
+    speedBtn.textContent = `속도 ${speedMul}x`;
+  });
+  window.addEventListener('keydown', e => {
+    if (mode === 'play' && e.code === 'KeyR') reset();
+  });
+
+  // ===== 메인 루프 =====
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+    last = now;
+    if (mode === 'play') {
+      let remaining = dt * speedMul;
+      while (remaining > 1e-6) {
+        const step = Math.min(remaining, 1 / 120); // 빠른 공이 뚫고 지나가지 않도록 잘게 나눠 계산
+        update(step);
+        remaining -= step;
+      }
+      render();
+      updateHud();
+      updateTimer();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  buildSelect();
+  // 저장해 둔 사진 불러오기
+  for (const c of CHARACTERS) {
+    const p = custom[c.id] && custom[c.id].photo;
+    if (p) loadPhoto(c.id, p, () => refreshCard(c.id));
+  }
+  showScreen('select');
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
